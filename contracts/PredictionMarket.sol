@@ -175,46 +175,46 @@ contract PredictionMarket {
         }
     }
 
-    function withdraw(uint _marketId) public {
-        // ... (This function needs to be updated next for the new Bet[] lists) ...
-        Market storage market = markets[_marketId];
-        require(market.isResolved, "Market is not yet resolved.");
-        
-        uint winnings = 0;
-        uint userBet = 0; // Find the user's specific bet amount
-
-        if (market.outcome == Outcome.Yes) {
-             for (uint i = 0; i < market.yesBetList.length; i++) {
-                if (market.yesBetList[i].user == msg.sender) {
-                   userBet = market.yesBetList[i].amount;
-                   // Don't break; a user might bet multiple times. Sum them up?
-                   // For simplicity, let's assume we pay out the first bet found and zero it.
-                   // A better approach would be needed for multiple bets.
-                   if (userBet > 0) {
-                      winnings = (userBet * (market.yesBets + market.noBets)) / market.yesBets;
-                      market.yesBetList[i].amount = 0; // Mark this specific bet entry as paid
-                      break; // Payout only the first winning bet found for simplicity
-                   }
-                }
+  function withdraw(uint _marketId) public {
+    Market storage market = markets[_marketId];
+    require(market.isResolved, "Market is not yet resolved.");
+    
+    uint totalUserBet = 0;
+    uint totalWinningBets = 0;
+    uint totalLosingBets = 0;
+    
+    // Calculate user's total bet amount
+    if (market.outcome == Outcome.Yes) {
+        // User bet on YES (winning side)
+        for (uint i = 0; i < market.yesBetList.length; i++) {
+            if (market.yesBetList[i].user == msg.sender && market.yesBetList[i].amount > 0) {
+                totalUserBet += market.yesBetList[i].amount;
+                market.yesBetList[i].amount = 0; // Mark as withdrawn
             }
-        } else if (market.outcome == Outcome.No) {
-             for (uint i = 0; i < market.noBetList.length; i++) {
-                if (market.noBetList[i].user == msg.sender) {
-                   userBet = market.noBetList[i].amount;
-                   if (userBet > 0) {
-                      winnings = (userBet * (market.yesBets + market.noBets)) / market.noBets;
-                      market.noBetList[i].amount = 0; // Mark this specific bet entry as paid
-                      break; // Payout only the first winning bet found for simplicity
-                   }
-                }
-            }
-        } else {
-            revert("Market outcome is not decided.");
         }
-        
-        require(winnings > 0, "You have no winnings to withdraw or already withdrew.");
-        
-        bool success = bettingToken.transfer(msg.sender, winnings);
-        require(success, "Token withdrawal failed.");
+        totalWinningBets = market.yesBets;
+        totalLosingBets = market.noBets;
+    } else if (market.outcome == Outcome.No) {
+        // User bet on NO (winning side)
+        for (uint i = 0; i < market.noBetList.length; i++) {
+            if (market.noBetList[i].user == msg.sender && market.noBetList[i].amount > 0) {
+                totalUserBet += market.noBetList[i].amount;
+                market.noBetList[i].amount = 0; // Mark as withdrawn
+            }
+        }
+        totalWinningBets = market.noBets;
+        totalLosingBets = market.yesBets;
+    } else {
+        revert("Market outcome is not decided.");
     }
+    
+    require(totalUserBet > 0, "You have no winnings to withdraw or already withdrew.");
+    
+    // Calculate winnings: (user's bet / total winning bets) * total pool
+    uint totalPool = market.yesBets + market.noBets;
+    uint winnings = (totalUserBet * totalPool) / totalWinningBets;
+    
+    bool success = bettingToken.transfer(msg.sender, winnings);
+    require(success, "Token withdrawal failed.");
+}
 }
